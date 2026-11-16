@@ -1,10 +1,12 @@
 const assert = require("node:assert/strict");
 const playwright = require(process.env.AI_HUB_PLAYWRIGHT_PATH || "playwright");
-const {chromium} = playwright;
+const browserEngine = process.env.AI_HUB_BROWSER || "chromium";
+const browserType = playwright[browserEngine];
+if (!browserType) throw new Error("Unknown browser engine: " + browserEngine);
 const origin = process.env.AI_HUB_TEST_URL || "http://127.0.0.1:18777";
 (async () => {
-  const browser = await chromium.launch({
-    headless:true, args:["--no-sandbox"],
+  const browser = await browserType.launch({
+    headless:true, args:browserEngine === "chromium" ? ["--no-sandbox"] : [],
     ...(process.env.AI_HUB_PROXY ? {proxy:{server:process.env.AI_HUB_PROXY}} : {})
   });
   const page = await browser.newPage({viewport:{width:393,height:852},isMobile:true,hasTouch:true});
