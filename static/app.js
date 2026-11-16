@@ -42,12 +42,23 @@ function legacyCopy(text) {
   field.readOnly = true;
   field.setAttribute("aria-hidden", "true");
   field.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;font-size:16px";
+  // textarea.value normalizes CRLF/CR to LF. Override the copy event with
+  // the exact original source instead of relying on the selected textarea.
+  let exactPayloadSet = false;
+  field.addEventListener("copy", event => {
+    if (!event.clipboardData) return;
+    try {
+      event.clipboardData.setData("text/plain", text);
+      event.preventDefault();
+      exactPayloadSet = true;
+    } catch { /* show manual fallback if custom clipboard data is blocked */ }
+  });
   document.body.append(field);
   try {
     field.focus({preventScroll: true});
     field.select();
     field.setSelectionRange(0, field.value.length);
-    return document.execCommand("copy") === true;
+    return document.execCommand("copy") === true && exactPayloadSet;
   } catch {
     return false;
   } finally {
@@ -61,12 +72,27 @@ function showManualCopy(text) {
   dialog.setAttribute("aria-modal", "true");
   dialog.setAttribute("aria-label", "テキストを選択してコピー");
   dialog.append(node("h2", null, "テキストをコピー"));
-  dialog.append(node("p", null, "テキストを長押しして「コピー」を選択してください。"));
+  dialog.append(node("p", null, "テキストを長押しして「コピー」を選択してください。改行コードが変わる場合があるため、原文を厳密に保存する場合はTXT保存を利用してください。"));
   const field = node("textarea", "copy-source");
   field.value = text;
   field.readOnly = true;
   field.setAttribute("aria-label", "コピーする全文");
   dialog.append(field);
+  const download = node("button", "mini-btn", "原文をTXT保存");
+  download.type = "button";
+  download.addEventListener("click", () => {
+    const data = new Blob([text], {type:"text/plain;charset=utf-8"});
+    const url = URL.createObjectURL(data);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "interaction-message.txt";
+    link.hidden = true;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  });
+  dialog.append(download);
   const close = node("button", "mini-btn", "閉じる");
   close.type = "button";
   const dismiss = () => backdrop.remove();
