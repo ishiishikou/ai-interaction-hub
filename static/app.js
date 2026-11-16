@@ -34,12 +34,71 @@ async function fetchJSON(url) {
   if (!r.ok) throw new Error("HTTP " + r.status);
   return await r.json();
 }
+function legacyCopy(text) {
+  // HTTP pages cannot access the modern Clipboard API. This fallback must
+  // run synchronously during the user's click (iOS requires user activation).
+  const field = document.createElement("textarea");
+  field.value = text;
+  field.readOnly = true;
+  field.setAttribute("aria-hidden", "true");
+  field.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;font-size:16px";
+  document.body.append(field);
+  try {
+    field.focus({preventScroll: true});
+    field.select();
+    field.setSelectionRange(0, field.value.length);
+    return document.execCommand("copy") === true;
+  } catch {
+    return false;
+  } finally {
+    field.remove();
+  }
+}
+function showManualCopy(text) {
+  const backdrop = node("div", "copy-overlay");
+  const dialog = node("section", "copy-dialog");
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-label", "テキストを選択してコピー");
+  dialog.append(node("h2", null, "テキストをコピー"));
+  dialog.append(node("p", null, "テキストを長押しして「コピー」を選択してください。"));
+  const field = node("textarea", "copy-source");
+  field.value = text;
+  field.readOnly = true;
+  field.setAttribute("aria-label", "コピーする全文");
+  dialog.append(field);
+  const close = node("button", "mini-btn", "閉じる");
+  close.type = "button";
+  const dismiss = () => backdrop.remove();
+  close.addEventListener("click", dismiss);
+  backdrop.addEventListener("click", e => { if(e.target === backdrop) dismiss(); });
+  dialog.append(close);
+  backdrop.append(dialog);
+  document.body.append(backdrop);
+  field.focus({preventScroll: true});
+  field.select();
+  field.setSelectionRange(0, field.value.length);
+}
+function markCopied(button) {
+  const original = button.textContent;
+  button.textContent = "コピーしました";
+  setTimeout(() => { if(button.isConnected) button.textContent = original; }, 1300);
+}
 async function copyText(text, button) {
+  // On insecure (Tailnet-only HTTP) origins, use execCommand directly so
+  // clipboard access happens before the click's user activation expires.
+  if (!window.isSecureContext || !navigator.clipboard?.writeText) {
+    if (legacyCopy(text)) markCopied(button);
+    else showManualCopy(text);
+    return;
+  }
   try {
     await navigator.clipboard.writeText(text);
-    const original = button.textContent; button.textContent = "コピーしました";
-    setTimeout(() => button.textContent = original, 1300);
-  } catch { button.textContent = "コピー失敗"; }
+    markCopied(button);
+  } catch {
+    if (legacyCopy(text)) markCopied(button);
+    else showManualCopy(text);
+  }
 }
 function makeMessage(event) {
   const item = node("article","message " + event.author + (event.kind==="raw_log"?" raw_log":""));
