@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ja"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>AI Interaction Hub</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/vendor/katex.min.css">
+<link rel="stylesheet" href="/vendor/texmath.css">
+<link rel="stylesheet" href="/vendor/highlight.css">
+<link rel="stylesheet" href="/style.css">
+</head><body>
+<div id="app">
+  <header class="header">
+    <div class="brand"><span class="brand-icon">◎</span><div><strong>Interaction Hub</strong><small>ChatGPT ↔ Codex</small></div></div>
+    <div class="header-actions"><span class="private"><span class="green-dot"></span> Local</span><button id="reload" class="icon-btn" aria-label="更新">⟳</button></div>
+  </header>
+  <div class="controls">
+    <div class="field"><label for="sessions">会話セッション</label><select id="sessions"><option>読み込み中...</option></select></div>
+    <div class="count"><span id="count">—</span><small>records</small></div>
+  </div>
+  <main id="timeline" role="log" aria-live="polite" aria-label="会話の履歴">
+    <div class="loading">記録を取得しています...</div>
+  </main>
+  <footer class="footer"><span>閲覧専用 · ChatGPTで入力</span><span id="updated">—</span></footer>
+</div>
+<script src="/vendor/markdown-it.min.js"></script>
+<script src="/vendor/highlight.min.js"></script>
+<script src="/vendor/katex.min.js"></script>
+<script src="/vendor/texmath.min.js"></script>
+<script src="/app.js"></script>
+</body></html>
