@@ -61,9 +61,11 @@ Tailnet内だけで閲覧可能にするには、Tailscale Serve等の認証済�
 ```sh
 python3 -m unittest discover -s tests -v
 node --check static/app.js
+# Playwright が導入済みの場合のブラウザ回帰テスト
+AI_HUB_PLAYWRIGHT_PATH=/opt/runtime/node_modules/playwright node tests/browser_regression.cjs
 ```
 
-AIRで動作するPlaywrightを使用して393px幅の画面と実データ、数式レンダリング、XSSの無害化、Consoleエラーを別途実機相当環境で検証します。
+Playwrightのテストでは通信障害からの回復、通信中のセッション切り替えを検証します。AIRでは393px幅の画面・実データ・数式レンダリング・XSSの無害化・Consoleエラーも検証済みです。Playwrightが別の場所にある場合は`AI_HUB_PLAYWRIGHT_PATH`を変更してください。
 
 ## セキュリティ
 

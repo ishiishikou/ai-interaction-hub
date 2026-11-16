@@ -14,7 +14,7 @@ if (window.katex && window.texmath) {
   md.use(window.texmath, {engine: window.katex, delimiters: "dollars",
     katexOptions: {throwOnError: false, trust: false, strict: "warn"}});
 }
-const state = {sessionId: null, signature: "", fetching: false};
+const state = {sessionId: null, signature: "", fetching: false, needsRefresh: false};
 const roles = {user:"あなた",chatgpt:"ChatGPT",codex:"Codex"};
 const icons = {chatgpt:"✦",codex:">_"};
 
@@ -99,17 +99,20 @@ async function loadSessions() {
   picker.value=state.sessionId;
 }
 async function loadTimeline() {
-  if (!state.sessionId || state.fetching) return;
+  if (!state.sessionId) return;
+  if (state.fetching) { state.needsRefresh = true; return; }
+  const targetSession = state.sessionId;
   state.fetching=true;
   try {
     let after=0, entries=[], page;
     do {
-      const data = await fetchJSON("/api/sessions/"+encodeURIComponent(state.sessionId)+"/events?after="+after+"&limit=500");
+      const data = await fetchJSON("/api/sessions/"+encodeURIComponent(targetSession)+"/events?after="+after+"&limit=500");
       page=data.events || []; entries.push(...page);
       if(page.length) after=page[page.length-1].seq;
       if(entries.length>10000) throw new Error("一度に表示できる記録件数を超えました");
     } while(page.length===500);
-    const signature=state.sessionId+":"+entries.length+":"+after;
+    if (targetSession !== state.sessionId) return;
+    const signature=targetSession+":"+entries.length+":"+after;
     if(state.signature!==signature) {
       state.signature=signature;
       const atBottom=timeline.scrollHeight<=window.innerHeight+window.scrollY+150;
@@ -120,13 +123,19 @@ async function loadTimeline() {
     }
     $("updated").textContent="更新 "+new Date().toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});
   } catch(error) {
-    timeline.replaceChildren(node("div","empty","読み込み失敗: "+error.message));
-  } finally {state.fetching=false;}
+    if (targetSession === state.sessionId) {
+      state.signature = "";
+      timeline.replaceChildren(node("div","empty","読み込み失敗: "+error.message));
+    }
+  } finally {
+    state.fetching=false;
+    if (state.needsRefresh) { state.needsRefresh=false; loadTimeline(); }
+  }
 }
 async function refresh() {
   if(state.fetching) return;
   try { await loadSessions(); await loadTimeline(); }
-  catch(e) { timeline.replaceChildren(node("div","empty","接続できません: "+e.message)); }
+  catch(e) { state.signature=""; timeline.replaceChildren(node("div","empty","接続できません: "+e.message)); }
 }
 picker.addEventListener("change",()=>{state.sessionId=picker.value;state.signature="";loadTimeline();});
 $("reload").addEventListener("click",refresh);

@@ -1,6 +1,7 @@
 import {cpSync,copyFileSync,mkdirSync} from "node:fs";
 import {resolve,join} from "node:path";
-const root=resolve(import.meta.dirname,"..");
+import {fileURLToPath} from "node:url";
+const root=resolve(fileURLToPath(new URL("..",import.meta.url)));
 const from=(part)=>join(root,"node_modules",part);
 const target=join(root,"static","vendor");
 mkdirSync(target,{recursive:true});
