@@ -117,7 +117,8 @@ def run_cli():
         print(store.create_session(args.title, args.id))
     elif args.cmd == "add":
         if args.file == "-":
-            content = sys.stdin.read()
+            # TextIOWrapper translates CRLF/CR by default; stdin bytes do not.
+            content = sys.stdin.buffer.read().decode("utf-8")
         else:
             with open(args.file, "r", encoding="utf-8", newline="") as f:
                 content = f.read()

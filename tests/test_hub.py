@@ -1,5 +1,7 @@
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -23,6 +25,15 @@ class StoreTest(unittest.TestCase):
         n = self.store.append(self.sid,"chatgpt",text,event_id="full",kind="delegation")
         self.assertEqual(self.store.events(self.sid)[0]["content"],text)
         self.assertEqual(n,1)
+    def test_cli_stdin_preserves_all_original_newlines(self):
+        payload = '日本語\r\nWindows改行\rMac改行\nUnix改行\n'.encode('utf-8')
+        proc = subprocess.run([sys.executable, 'hub_app.py', 'add', '--session', self.sid,
+                               '--author', 'chatgpt', '--kind', 'delegation', '--file', '-'],
+                              input=payload, capture_output=True, cwd=Path(__file__).resolve().parents[1],
+                              env={**os.environ, 'AI_HUB_DATA_DIR': self.tmp.name}, check=True)
+        self.assertIn(b'"ok": true', proc.stdout)
+        self.assertEqual(self.store.events(self.sid)[0]['content'].encode('utf-8'), payload)
+
     def test_three_authors_and_order(self):
         for author in ("user","chatgpt","codex"):
             self.store.append(self.sid,author,author)
