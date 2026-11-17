@@ -66,6 +66,51 @@ class StoreTest(unittest.TestCase):
         payload='<img src=x onerror=alert(1)>\n<script>alert(1)</script>'
         self.store.append(self.sid,"user",payload)
         self.assertEqual(self.store.events(self.sid)[0]["content"],payload)
+    def test_delegation_listing_and_exact_detail(self):
+        other=self.store.create_session("別のチャット","s2")
+        initial="初回の依頼\r\nそのまま保持 <script>alert(1)</script>"
+        seq1=self.store.append(self.sid,"chatgpt",initial,kind="delegation",
+            source="chatgpt-to-codex-cli",metadata={"task_id":"task-1","revision_type":"initial"})
+        self.store.append(self.sid,"codex","回答",kind="result")
+        seq2=self.store.append(self.sid,"chatgpt","追記の依頼",kind="delegation",
+            source="chatgpt-to-codex-cli",metadata={"task_id":"task-1","revision_type":"followup"})
+        seq3=self.store.append(other,"chatgpt","Museへの依頼",kind="delegation",
+            source="chatgpt-to-muse-sdk",metadata={"task_id":"task-1","target_ai":"Muse"})
+        listing=self.store.delegations(limit=2)
+        self.assertEqual([x["seq"] for x in listing["delegations"]],[seq3,seq2])
+        self.assertEqual(listing["next_before"],seq2)
+        next_page=self.store.delegations(limit=2,before=seq2)
+        self.assertEqual([x["seq"] for x in next_page["delegations"]],[seq1])
+        self.assertEqual(self.store.delegations(session_id=self.sid)["delegations"][0]["seq"],seq2)
+        detail=self.store.delegation(seq1)
+        self.assertEqual(detail["delegation"]["content"],initial)
+        self.assertEqual([r["seq"] for r in detail["related"]],[seq1,seq2])
+        self.assertEqual([r["seq"] for r in self.store.delegation(seq3)["related"]],[seq3])
+        self.assertIsNone(self.store.delegation(999999))
+
+    def test_delegation_input_validation(self):
+        for kwargs in ({"limit":0},{"limit":101},{"before":0},{"session_id":""},
+                       {"before":2**63}):
+            with self.assertRaises(ValueError): self.store.delegations(**kwargs)
+        for seq in (0,-2,2**63):
+            with self.assertRaises(ValueError): self.store.delegation(seq)
+
+    def test_revision_links_do_not_mix_recipient_ai(self):
+        codex=self.store.append(self.sid,"chatgpt","Codexへ初回",kind="delegation",
+            source="chatgpt-to-codex-cli",metadata={"task_id":"shared","revision_type":"initial"})
+        muse=self.store.append(self.sid,"chatgpt","Museへ依頼",kind="delegation",
+            source="chatgpt-to-muse-sdk",metadata={"task_id":"shared","revision_type":"initial"})
+        retry=self.store.append(self.sid,"chatgpt","Codexへ再試行",kind="delegation",
+            source="chatgpt-to-codex-cli",metadata={"task_id":"shared","revision_type":"retry"})
+        self.assertEqual([r["seq"] for r in self.store.delegation(codex)["related"]],[codex,retry])
+        self.assertEqual([r["seq"] for r in self.store.delegation(muse)["related"]],[muse])
+        with_target=self.store.append(self.sid,"chatgpt","別AI",kind="delegation",
+            source="explicit",metadata={"task_id":"shared","target_ai":"Muse"})
+        without_target=self.store.append(self.sid,"chatgpt","宛先なし",kind="delegation",
+            source="explicit",metadata={"task_id":"shared"})
+        self.assertEqual([r["seq"] for r in self.store.delegation(with_target)["related"]],[with_target])
+        self.assertEqual([r["seq"] for r in self.store.delegation(without_target)["related"]],[without_target])
+
     def test_concurrent_unique_events(self):
         errors=[]
         def writer(i):
@@ -97,6 +142,28 @@ class HttpTest(unittest.TestCase):
         with urlopen(self.base+"/") as r:
             page=r.read().decode("utf-8")
             self.assertIn("Interaction Hub",page)
+    def test_delegation_api_and_missing(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            store=Store(tmp)
+            sid=store.create_session("API確認","for-api")
+            seq=store.append(sid,"chatgpt","これは原文\n2行目",kind="delegation",source="chatgpt-to-muse-sdk")
+            with patch("hub_app.Store",return_value=store):
+                with urlopen(self.base+"/api/delegations?limit=1") as response:
+                    data=json.load(response)
+                self.assertEqual(data["delegations"][0]["seq"],seq)
+                self.assertEqual(data["delegations"][0]["session_title"],"API確認")
+                self.assertNotIn("content",data["delegations"][0])
+                with urlopen(self.base+"/api/delegations/"+str(seq)) as response:
+                    self.assertEqual(json.load(response)["delegation"]["content"],"これは原文\n2行目")
+                for path,code in (("/api/delegations?limit=101",400),("/api/delegations/1x",400),
+                                  ("/api/delegations?before=9223372036854775808",400),
+                                  ("/api/delegations/9223372036854775808",400),
+                                  ("/api/delegations/999999",404)):
+                    with self.assertRaises(HTTPError) as err:
+                        urlopen(self.base+path)
+                    self.assertEqual(err.exception.code,code)
+
     def test_http_no_write(self):
         with self.assertRaises(HTTPError) as e:
             urlopen(Request(self.base+"/api/sessions",data=b'{}',method="POST"))

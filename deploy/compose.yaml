@@ -1,0 +1,49 @@
+name: ai-interaction-hub
+services:
+  web:
+    image: python:3.12-alpine
+    container_name: ai-interaction-hub-web
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      AI_HUB_DATA_DIR: /data
+      AI_HUB_ALLOW_NONLOOPBACK: "YES"
+    command: ["python", "-u", "/app/hub_app.py", "serve", "--host", "0.0.0.0", "--port", "18777"]
+    volumes:
+      - ../:/app:ro
+      - ../../ai-interaction-hub-data:/data:rw
+    networks:
+      private:
+        aliases:
+          - ai-interaction-hub-web
+    # No published ports. Docker network peers and Docker Engine host can still reach its bridge IP.
+  tailscale:
+    image: tailscale/tailscale:stable
+    container_name: ai-interaction-hub-tailscale
+    restart: unless-stopped
+    depends_on:
+      - web
+    environment:
+      TS_SERVE_CONFIG: /config/serve.json
+      TS_HOSTNAME: ai-conversation-hub
+      TS_AUTH_ONCE: "true"
+      TS_USERSPACE: "true"
+      TS_ACCEPT_DNS: "false"
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_BOOT_TIMEOUT: 168h
+      TS_SOCKS5_SERVER: 127.0.0.1:1055
+    volumes:
+      - ../../ai-interaction-hub-data/tailscale-config-bridge:/config:ro
+      - tailscale-state:/var/lib/tailscale:rw
+    networks:
+      - private
+    # No NET_ADMIN, --privileged or published ports. Tailscale Serve is tailnet-only.
+networks:
+  private:
+    external: true
+    name: ai-interaction-hub-private
+volumes:
+  tailscale-state:
+    external: true
+    name: ai-interaction-hub-tailscale-state
