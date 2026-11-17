@@ -25,6 +25,7 @@ const origin = process.env.AI_HUB_TEST_URL || "http://127.0.0.1:18777";
     content:expected,content_format:"markdown",metadata:null,rich:null
   }]}}));
   await page.goto(origin,{waitUntil:"networkidle"});
+  await page.click("#history-tab");
   assert.equal(await page.evaluate(()=>window.isSecureContext),false,"test requires HTTP origin");
   await page.evaluate(()=>{
     window.__copied = null;

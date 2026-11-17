@@ -12,6 +12,7 @@ DATA_DIR = Path(os.environ.get("AI_HUB_DATA_DIR", "/workspace/ai-interaction-hub
 ROLES = {"user", "chatgpt", "codex"}
 KINDS = {"message", "delegation", "result", "raw_log", "status"}
 MAX_TEXT = 16 * 1024 * 1024
+MAX_SQLITE_INT = (1 << 63) - 1
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
@@ -110,6 +111,72 @@ class Store:
             """, (eid,session_id,author,kind,source,content,content_format,rich_json,meta_json,now))
             db.execute("UPDATE sessions SET updated_at=? WHERE id=?", (now,session_id))
             return int(cur.lastrowid)
+
+    def delegations(self, *, limit=50, before=None, session_id=None):
+        """Newest first, listing metadata and short previews without sending full prompts."""
+        if not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("invalid limit")
+        if before is not None and (type(before) is not int or not 1 <= before <= MAX_SQLITE_INT):
+            raise ValueError("invalid cursor")
+        if session_id is not None and (not isinstance(session_id, str) or not session_id or len(session_id) > 180):
+            raise ValueError("invalid session")
+        where = ["e.kind='delegation'", "e.author='chatgpt'"]
+        params = []
+        if before is not None:
+            where.append("e.seq < ?")
+            params.append(before)
+        if session_id is not None:
+            where.append("e.session_id = ?")
+            params.append(session_id)
+        sql = """SELECT e.seq, e.id, e.session_id, s.title AS session_title,
+                        e.source, e.created_at, e.metadata_json,
+                        substr(e.content, 1, 181) AS excerpt,
+                        length(e.content) AS characters
+                 FROM events e JOIN sessions s ON s.id=e.session_id
+                 WHERE """ + " AND ".join(where) + " ORDER BY e.seq DESC LIMIT ?"
+        with self.connect() as db:
+            rows = [dict(r) for r in db.execute(sql, (*params, limit + 1))]
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        for row in rows:
+            row["metadata"] = json.loads(row.pop("metadata_json")) if row["metadata_json"] else None
+            row["excerpt"] = row["excerpt"][:160] + ("…" if row["characters"] > 160 else "")
+        return {"delegations": rows, "next_before": rows[-1]["seq"] if has_more and rows else None}
+
+    def delegation(self, seq):
+        """Return an exact immutable event and other revisions with an explicit shared task id."""
+        if type(seq) is not int or not 1 <= seq <= MAX_SQLITE_INT:
+            raise ValueError("invalid delegation id")
+        with self.connect() as db:
+            row = db.execute("""SELECT e.*, s.title AS session_title
+                FROM events e JOIN sessions s ON s.id=e.session_id
+                WHERE e.seq=? AND e.kind='delegation' AND e.author='chatgpt'""", (seq,)).fetchone()
+            if row is None:
+                return None
+            record = dict(row)
+            record["rich"] = json.loads(record.pop("rich_json")) if record["rich_json"] else None
+            record["metadata"] = json.loads(record.pop("metadata_json")) if record["metadata_json"] else None
+            metadata = record["metadata"] if isinstance(record["metadata"], dict) else {}
+            group = metadata.get("delegation_group") or metadata.get("task_id")
+            recipient = metadata.get("recipient") or metadata.get("target_ai") or metadata.get("agent")
+            related = []
+            if isinstance(group, str) and group.strip():
+                candidates = db.execute("""SELECT seq, metadata_json, created_at, source FROM events
+                    WHERE session_id=? AND author='chatgpt' AND kind='delegation'
+                    ORDER BY seq ASC""", (record["session_id"],))
+                for candidate in candidates:
+                    data = json.loads(candidate["metadata_json"]) if candidate["metadata_json"] else {}
+                    if not isinstance(data, dict):
+                        continue
+                    candidate_group = data.get("delegation_group") or data.get("task_id")
+                    candidate_recipient = data.get("recipient") or data.get("target_ai") or data.get("agent")
+                    # A parent task can involve multiple AIs. Revision history is per destination.
+                    if (candidate_group == group and candidate["source"] == record["source"]
+                            and candidate_recipient == recipient):
+                        related.append({"seq": candidate["seq"], "created_at": candidate["created_at"],
+                                        "source": candidate["source"],
+                                        "revision_type": data.get("revision_type")})
+            return {"delegation": record, "related": related}
 
     def sessions(self):
         with self.connect() as db:

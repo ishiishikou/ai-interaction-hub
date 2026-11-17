@@ -38,6 +38,24 @@ class Handler(SimpleHTTPRequestHandler):
             return self.json(200, {"ok": True, "name": "ai-interaction-hub"})
         if parsed.path == "/api/sessions":
             return self.json(200, {"sessions": Store().sessions()})
+        if parsed.path == "/api/delegations":
+            try:
+                q = parse_qs(parsed.query)
+                limit = int(q.get("limit", ["50"])[0])
+                before = q.get("before", [None])[0]
+                before = int(before) if before is not None else None
+                session_id = q.get("session", [None])[0]
+                return self.json(200, Store().delegations(limit=limit, before=before, session_id=session_id))
+            except (ValueError, TypeError, OverflowError) as exc:
+                return self.json(400, {"error": str(exc)})
+        if parsed.path.startswith("/api/delegations/"):
+            fragment = parsed.path[len("/api/delegations/"):]
+            try:
+                seq = int(fragment)
+                result = Store().delegation(seq)
+            except (ValueError, TypeError, OverflowError) as exc:
+                return self.json(400, {"error": str(exc)})
+            return self.json(200, result) if result else self.json(404, {"error": "not found"})
         if parsed.path.startswith("/api/sessions/") and parsed.path.endswith("/events"):
             sid = unquote(parsed.path[len("/api/sessions/"):-len("/events")]).strip("/")
             try:
@@ -45,7 +63,7 @@ class Handler(SimpleHTTPRequestHandler):
                 after = int(q.get("after", ["0"])[0])
                 limit = int(q.get("limit", ["200"])[0])
                 result = Store().events(sid, after=after, limit=limit)
-            except (ValueError, TypeError) as exc:
+            except (ValueError, TypeError, OverflowError) as exc:
                 return self.json(400, {"error": str(exc)})
             return self.json(200, {"events": result})
         if parsed.path.startswith("/api/"):
@@ -99,7 +117,8 @@ def run_cli():
         print(store.create_session(args.title, args.id))
     elif args.cmd == "add":
         if args.file == "-":
-            content = sys.stdin.read()
+            # TextIOWrapper translates CRLF/CR by default; stdin bytes do not.
+            content = sys.stdin.buffer.read().decode("utf-8")
         else:
             with open(args.file, "r", encoding="utf-8", newline="") as f:
                 content = f.read()

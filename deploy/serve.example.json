@@ -1,0 +1,19 @@
+{
+  "TCP": {
+    "443": {"HTTPS": true},
+    "8080": {"HTTP": true},
+    "8081": {"TCPForward": "ai-interaction-hub-web:18777"}
+  },
+  "Web": {
+    "${TS_CERT_DOMAIN}:443": {
+      "Handlers": {"/": {"Proxy": "http://ai-interaction-hub-web:18777"}}
+    },
+    "${TS_CERT_DOMAIN}:8080": {
+      "Handlers": {"/": {"Proxy": "http://ai-interaction-hub-web:18777"}}
+    }
+  },
+  "AllowFunnel": {
+    "${TS_CERT_DOMAIN}:443": false,
+    "${TS_CERT_DOMAIN}:8080": false
+  }
+}

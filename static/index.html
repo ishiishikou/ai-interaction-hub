@@ -9,24 +9,47 @@
 <link rel="stylesheet" href="/vendor/texmath.css">
 <link rel="stylesheet" href="/vendor/highlight.css">
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/request-style.css">
 </head><body>
 <div id="app">
   <header class="header">
-    <div class="brand"><span class="brand-icon">◎</span><div><strong>Interaction Hub</strong><small>ChatGPT ↔ Codex</small></div></div>
+    <div class="brand"><span class="brand-icon">◎</span><div><strong>AI Task Monitor</strong><small>ChatGPT ↔ AI</small></div></div>
     <div class="header-actions"><span class="private"><span class="green-dot"></span> Local</span><button id="reload" class="icon-btn" aria-label="更新">⟳</button></div>
   </header>
-  <div class="controls">
-    <div class="field"><label for="sessions">会話セッション</label><select id="sessions"><option>読み込み中...</option></select></div>
-    <div class="count"><span id="count">—</span><small>records</small></div>
-  </div>
-  <main id="timeline" role="log" aria-live="polite" aria-label="会話の履歴">
-    <div class="loading">記録を取得しています...</div>
-  </main>
-  <footer class="footer"><span>閲覧専用 · ChatGPTで入力</span><span id="updated">—</span></footer>
+  <nav class="hub-tabs" aria-label="表示切り替え">
+    <button id="requests-tab" class="hub-tab is-active" aria-current="page" type="button">依頼原文</button>
+    <button id="history-tab" class="hub-tab" type="button">会話履歴</button>
+  </nav>
+  <section id="requests-pane" class="requests-pane" aria-label="AIに送った依頼">
+    <div id="request-list-view">
+      <div class="requests-title"><div><h1>送信した依頼</h1><p>各AIに依頼した原文をそのまま確認</p></div><span id="request-count" class="requests-count"></span></div>
+      <div class="request-filters">
+        <label for="request-session">対象チャット</label>
+        <select id="request-session"><option value="">すべての登録チャット</option></select>
+      </div>
+      <div id="request-list" class="request-list" aria-live="polite"><p class="request-hint">記録を取得しています…</p></div>
+      <button id="request-more" class="request-more" type="button" hidden>さらに表示</button>
+    </div>
+    <div id="request-detail-view" hidden>
+      <button id="request-back" type="button" class="detail-back">← 依頼一覧へ</button>
+      <div id="request-detail" aria-live="polite"></div>
+    </div>
+  </section>
+  <section id="history-pane" hidden aria-label="会話履歴">
+    <div class="controls">
+      <div class="field"><label for="sessions">会話セッション</label><select id="sessions"><option>読み込み中...</option></select></div>
+      <div class="count"><span id="count">—</span><small>records</small></div>
+    </div>
+    <main id="timeline" role="log" aria-live="polite" aria-label="会話の履歴">
+      <div class="loading">記録を取得しています...</div>
+    </main>
+  </section>
+  <footer class="footer"><span>閲覧専用 · 登録済みの記録</span><span id="updated">—</span></footer>
 </div>
 <script src="/vendor/markdown-it.min.js"></script>
 <script src="/vendor/highlight.min.js"></script>
 <script src="/vendor/katex.min.js"></script>
 <script src="/vendor/texmath.min.js"></script>
 <script src="/app.js"></script>
+<script src="/delegations.js"></script>
 </body></html>

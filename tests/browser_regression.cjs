@@ -22,6 +22,7 @@ const base = process.env.AI_HUB_URL || "http://127.0.0.1:18777";
   return route.fulfill({json:events(id,id==="A"?"A-SOURCE":"B-SOURCE")});
  });
  await page.goto(base,{waitUntil:"networkidle"});
+ await page.click("#history-tab");
  await page.waitForFunction(()=>document.querySelector(".message")?.textContent.includes("A-SOURCE"));
  assert.equal(await page.locator(".message").count(),1);
  failA=true;

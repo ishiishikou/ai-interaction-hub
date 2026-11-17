@@ -18,6 +18,19 @@ const state = {sessionId: null, signature: "", fetching: false, needsRefresh: fa
 const roles = {user:"あなた",chatgpt:"ChatGPT",codex:"Codex"};
 const icons = {chatgpt:"✦",codex:">_"};
 
+function delegationRecipient(record) {
+  const metadata = record && record.metadata && typeof record.metadata === "object" &&
+    !Array.isArray(record.metadata) ? record.metadata : {};
+  const specified = [metadata.recipient, metadata.target_ai, metadata.agent].find(
+    x => typeof x === "string" && x.length > 0 && x.length <= 80
+  );
+  if (specified) return specified;
+  const source = String(record?.source || "").toLowerCase();
+  if (source.includes("codex")) return "Codex";
+  if (source.includes("muse")) return "Muse";
+  return "送信先未記録";
+}
+
 function node(tag, className, text) {
   const el = document.createElement(tag);
   if (className) el.className = className;
@@ -136,7 +149,7 @@ function makeMessage(event) {
   const t = node("time",null,prettyTime(event.created_at));
   t.dateTime = event.created_at; meta.append(t);
   if (event.kind !== "message") meta.append(node("span","kind",({
-    delegation:"Codexへの依頼",result:"返却結果",raw_log:"生ログ",status:"状態"
+    delegation:delegationRecipient(event)+"への依頼",result:"返却結果",raw_log:"生ログ",status:"状態"
   })[event.kind] || event.kind));
   body.append(meta);
   if (event.kind !== "raw_log") {
@@ -200,7 +213,7 @@ async function loadTimeline() {
     const signature=targetSession+":"+entries.length+":"+after;
     if(state.signature!==signature) {
       state.signature=signature;
-      const atBottom=timeline.scrollHeight<=window.innerHeight+window.scrollY+150;
+      const atBottom=!$("history-pane").hidden && timeline.scrollHeight<=window.innerHeight+window.scrollY+150;
       timeline.replaceChildren(...entries.map(makeMessage));
       if(!entries.length) timeline.append(node("div","empty","このセッションにはまだ記録がありません。"));
       $("count").textContent=String(entries.length);
@@ -218,11 +231,13 @@ async function loadTimeline() {
   }
 }
 async function refresh() {
+  if ($("history-pane")?.hidden || document.hidden) return;
   if(state.fetching) return;
   try { await loadSessions(); await loadTimeline(); }
   catch(e) { state.signature=""; timeline.replaceChildren(node("div","empty","接続できません: "+e.message)); }
 }
 picker.addEventListener("change",()=>{state.sessionId=picker.value;state.signature="";loadTimeline();});
 $("reload").addEventListener("click",refresh);
+window.addEventListener("ai-view-history", refresh);
 refresh();
 setInterval(refresh,4500);
